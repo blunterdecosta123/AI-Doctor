@@ -1,0 +1,48 @@
+.alz-scroller {
+  --bg-color-highlight: hsl(60, 90%, 50%);
+  --color-text: hsl(192, 14%, 20%);
+  --color-text-highlight: hsl(192, 14%, 0%);
+  color: var(--color-text);
+}
+
+/* text-highlight now uses CSS var --fill controlled by GSAP */
+.alz-scroller .text-highlight {
+  position: relative;
+  display: inline-block;
+  background-repeat: no-repeat;
+  /* use the animated CSS var for the horizontal fill */
+  background-size: var(--fill, 0%) 100%;
+  transition: color 520ms cubic-bezier(.25,1,.5,1); /* color smoothly transitions, fill is driven by GSAP */
+  color: inherit;
+}
+
+/* fallback active class (not required now, but harmless) */
+.alz-scroller .text-highlight.active {
+  color: var(--color-text-highlight);
+}
+
+/* style variants */
+.alz-scroller[data-highlight="background"] .text-highlight {
+  background-image: linear-gradient(var(--bg-color-highlight), var(--bg-color-highlight));
+}
+
+.alz-scroller[data-highlight="half"] .text-highlight {
+  --line-size: 0.5em;
+  background-image: linear-gradient(transparent calc(100% - var(--line-size)), var(--bg-color-highlight) var(--line-size));
+}
+
+.alz-scroller[data-highlight="underline"] .text-highlight {
+  --line-size: 0.12em;
+  background-image: linear-gradient(transparent calc(100% - var(--line-size)), var(--color-text) var(--line-size));
+}
+
+/* screen-reader helpers (hidden) */
+.alz-scroller .text-highlight::before,
+.alz-scroller .text-highlight::after {
+  content: "";
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(1px, 1px, 1px, 1px);
+}

@@ -142,10 +142,7 @@ cd ai-doctor
     npm run dev
     ```
 
-5.  Open your browser and navigate to the URL provided (usually `http://localhost:5173`). You should see the application running.
-
-https://ai-doctor-sid.netlify.app/
-
+5.  Open your browser and navigate to the URL provided (usually `http://localhost:5173`).
 -----
 
 ## ⚠️ Disclaimer
