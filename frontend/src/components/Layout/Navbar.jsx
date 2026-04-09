@@ -8,6 +8,7 @@ export default function Navbar() {
   const nav = [
     { to: "/", label: "Home" },
     { to: "/detect", label: "Detect" },
+    { to: "/memory-game", label: "Memory Game" },
     { to: "/how-it-works", label: "How it works" },
     { to: "/privacy", label: "Privacy" },
     { to: "/contact", label: "Contact" },

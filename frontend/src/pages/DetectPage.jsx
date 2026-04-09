@@ -19,12 +19,14 @@ import {
 } from "@/components/ui/alert";
 
 export default function DetectPage() {
+  const precautionsCacheRef = useRef({});
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [diagnosis, setDiagnosis] = useState(null);
   const [confidence, setConfidence] = useState(null);
   const [error, setError] = useState(null);
   const [isLoading, setIsLoading] = useState(false);
+  const [hasLoadedPrecautions, setHasLoadedPrecautions] = useState(false);
 
   const [chatHistory, setChatHistory] = useState([]);
   const [userMessage, setUserMessage] = useState("");
@@ -53,6 +55,7 @@ export default function DetectPage() {
     setConfidence(null);
     setError(null);
     setChatHistory([]);
+    setHasLoadedPrecautions(false);
   };
 
   const handlePredict = async () => {
@@ -80,7 +83,8 @@ export default function DetectPage() {
 
       setDiagnosis(data.diagnosis);
       setConfidence(data.confidence);
-      handleGetPrecautions(data.diagnosis);
+      setChatHistory([]);
+      setHasLoadedPrecautions(false);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -89,6 +93,15 @@ export default function DetectPage() {
   };
 
   const handleGetPrecautions = async (currentDiagnosis) => {
+    if (!currentDiagnosis) return;
+
+    const cachedPrecautions = precautionsCacheRef.current[currentDiagnosis];
+    if (cachedPrecautions) {
+      setChatHistory([{ role: "model", parts: [cachedPrecautions] }]);
+      setHasLoadedPrecautions(true);
+      return;
+    }
+
     setIsChatLoading(true);
     try {
       const response = await fetch(
@@ -106,9 +119,11 @@ export default function DetectPage() {
       const data = await response.json();
       if (data.error) throw new Error(data.error);
 
+      precautionsCacheRef.current[currentDiagnosis] = data.response_text;
       setChatHistory([
         { role: "model", parts: [data.response_text] },
       ]);
+      setHasLoadedPrecautions(true);
     } catch (err) {
       setChatHistory([
         {
@@ -118,6 +133,7 @@ export default function DetectPage() {
           ],
         },
       ]);
+      setHasLoadedPrecautions(false);
     } finally {
       setIsChatLoading(false);
     }
@@ -266,6 +282,20 @@ export default function DetectPage() {
                         {confidence}%
                       </span>
                     </p>
+                    <div className="mt-4 flex flex-wrap gap-3">
+                      <Button
+                        onClick={() => handleGetPrecautions(diagnosis)}
+                        disabled={isChatLoading}
+                        className="bg-[#6BA292] text-white hover:bg-[#5C9182]"
+                      >
+                        {isChatLoading && (
+                          <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                        )}
+                        {hasLoadedPrecautions
+                          ? "Refresh Lifestyle Tips"
+                          : "Get Lifestyle Tips"}
+                      </Button>
+                    </div>
                   </AlertDescription>
                 </Alert>
               </div>
@@ -277,7 +307,7 @@ export default function DetectPage() {
             <CardHeader>
               <CardTitle>Chat Assistant</CardTitle>
               <CardDescription className="text-[#5F6F73]">
-                Ask follow-up questions about the analysis.
+                Ask follow-up questions about the analysis. 
               </CardDescription>
             </CardHeader>
 
@@ -288,7 +318,8 @@ export default function DetectPage() {
               <div className="space-y-4">
                 {chatHistory.length === 0 && (
                   <p className="text-center text-[#7A8E8C] pt-8">
-                    Upload an MRI to begin the chat.
+                    Run analysis, then load lifestyle tips or ask a follow-up
+                    question.
                   </p>
                 )}
 

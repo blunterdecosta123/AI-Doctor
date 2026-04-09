@@ -1,0 +1,150 @@
+.contact-page {
+  display: flex;
+  flex-direction: row;
+  height: 100vh;
+  overflow: hidden;
+  padding: 2rem;
+  gap: 2rem;
+  background: #f5f0eb;
+  position: relative;
+}
+
+.contact-alert {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 50;
+  padding: 0.75rem 1.5rem;
+  border-radius: 9999px;
+  color: white;
+  font-size: 0.875rem;
+  font-weight: 500;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.contact-alert-danger {
+  background: #ef4444;
+}
+
+.contact-alert-success {
+  background: #22c55e;
+}
+
+.contact-form-column {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-width: 0;
+}
+
+.contact-eyebrow {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  color: #888;
+  margin-bottom: 0.5rem;
+}
+
+.contact-title {
+  font-size: 2.5rem;
+  font-weight: 800;
+  line-height: 1.2;
+  margin-bottom: 2rem;
+  color: #1a1a1a;
+}
+
+.contact-form {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.contact-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.contact-label {
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: #333;
+}
+
+.contact-input,
+.contact-textarea {
+  padding: 0.75rem 1rem;
+  border-radius: 0.75rem;
+  border: 1px solid #ddd;
+  font-size: 0.95rem;
+  background: white;
+  color: #1a1a1a;
+  outline: none;
+  width: 100%;
+  box-sizing: border-box;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
+}
+
+.contact-textarea {
+  resize: vertical;
+}
+
+.contact-submit {
+  padding: 0.85rem 2rem;
+  border-radius: 0.75rem;
+  border: none;
+  background: #1a1a1a;
+  color: white;
+  font-weight: 600;
+  font-size: 1rem;
+  cursor: pointer;
+  opacity: 1;
+  align-self: flex-start;
+  transition: opacity 0.2s;
+}
+
+.contact-submit:disabled {
+  cursor: not-allowed;
+  opacity: 0.7;
+}
+
+.contact-canvas-column {
+  width: 50%;
+  height: 100%;
+  border-radius: 1.5rem;
+  overflow: hidden;
+  background: #ede8e3;
+}
+
+@media (max-width: 960px) {
+  .contact-page {
+    flex-direction: column;
+    height: auto;
+    min-height: calc(100vh - 72px);
+    padding: 1.25rem;
+  }
+
+  .contact-form-column,
+  .contact-canvas-column {
+    width: 100%;
+  }
+
+  .contact-form-column {
+    justify-content: flex-start;
+  }
+
+  .contact-canvas-column {
+    min-height: 360px;
+  }
+
+  .contact-title {
+    font-size: 2rem;
+  }
+
+  .contact-alert {
+    width: calc(100% - 2rem);
+    text-align: center;
+  }
+}

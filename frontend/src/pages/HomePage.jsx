@@ -245,6 +245,19 @@ export default function HomePage() {
             >
               How it Works
             </Button>
+
+            <Button
+              size="lg"
+              variant="outline"
+              onClick={() => navigate("/memory-game")}
+              style={{
+                color: DARK,
+                borderColor: DARK,
+                backgroundColor: "rgba(255,255,255,0.52)",
+              }}
+            >
+              Memory Game
+            </Button>
           </div>
         </div>
       </section>
@@ -343,6 +356,105 @@ export default function HomePage() {
           <div className="p-6 rounded-lg" style={{ background: "white", border: `1px solid rgba(50,50,50,0.06)`, boxShadow: "0 6px 20px rgba(50,50,50,0.03)" }}>
             <h3 className="text-lg font-semibold" style={{ color: DARK }}>Privacy-first</h3>
             <p className="mt-2" style={{ color: DARK, opacity: 0.8 }}>Images are processed respecting privacy settings; refer to the Privacy page for details.</p>
+          </div>
+        </div>
+      </section>
+
+      <section style={{ backgroundColor: "#F4ECE6" }} className="py-14">
+        <div className="max-w-6xl mx-auto px-6">
+          <div
+            className="rounded-[2rem] overflow-hidden border px-6 py-8 md:px-10 md:py-10 grid gap-8 lg:grid-cols-[1.1fr_0.9fr] items-center"
+            style={{
+              background: "linear-gradient(135deg, rgba(255,255,255,0.92), rgba(234,223,213,0.95))",
+              borderColor: "rgba(50,50,50,0.10)",
+              boxShadow: "0 22px 60px rgba(50,50,50,0.08)",
+            }}
+          >
+            <div>
+              <p
+                className="text-sm font-medium uppercase tracking-[0.24em]"
+                style={{ color: "rgba(50,50,50,0.58)" }}
+              >
+                New cognitive activity
+              </p>
+              <h2
+                className="mt-3 text-3xl md:text-4xl font-semibold leading-tight"
+                style={{ color: DARK }}
+              >
+                Add a warm, polished memory game to the Early ALsist experience.
+              </h2>
+              <p
+                className="mt-4 text-lg max-w-2xl"
+                style={{ color: "rgba(50,50,50,0.78)" }}
+              >
+                Visitors can now play a calming card-match exercise with the
+                same soft palette, rounded surfaces, and reassuring tone as the
+                rest of the site.
+              </p>
+
+              <div className="mt-7 flex flex-col sm:flex-row gap-4">
+                <Button
+                  size="lg"
+                  onClick={() => navigate("/memory-game")}
+                  style={{ backgroundColor: DARK, color: "#fff" }}
+                >
+                  Play Memory Game
+                </Button>
+
+                <Button
+                  size="lg"
+                  variant="outline"
+                  onClick={() => navigate("/detect")}
+                  style={{ borderColor: DARK, color: DARK }}
+                >
+                  Return to Detection
+                </Button>
+              </div>
+            </div>
+
+            <div
+              className="rounded-[1.75rem] border p-5 sm:p-6"
+              style={{
+                background: "linear-gradient(180deg, rgba(50,50,50,0.96), rgba(50,50,50,0.88))",
+                borderColor: "rgba(255,255,255,0.08)",
+                boxShadow: "0 20px 45px rgba(50,50,50,0.15)",
+              }}
+            >
+              <div className="grid grid-cols-3 gap-3">
+                {[
+                  "Memory",
+                  "Focus",
+                  "Sleep",
+                  "Music",
+                  "Calm",
+                  "Reading",
+                ].map((label, cardIndex) => (
+                  <div
+                    key={label}
+                    className={`aspect-[4/5] rounded-2xl p-3 flex flex-col justify-between ${cardIndex % 2 === 0 ? "translate-y-2" : ""}`}
+                    style={{
+                      background:
+                        cardIndex % 2 === 0
+                          ? "linear-gradient(180deg, #F5EADF, #FFFFFF)"
+                          : "linear-gradient(180deg, #E8DDD3, #F8F3EF)",
+                    }}
+                  >
+                    <span
+                      className="inline-flex w-fit rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.18em]"
+                      style={{
+                        backgroundColor: "rgba(50,50,50,0.08)",
+                        color: DARK,
+                      }}
+                    >
+                      Match
+                    </span>
+                    <span className="text-sm font-semibold" style={{ color: DARK }}>
+                      {label}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
           </div>
         </div>
       </section>

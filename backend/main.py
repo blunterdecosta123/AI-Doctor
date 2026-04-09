@@ -27,6 +27,33 @@ MODEL_PATH = "alzheimer_cnn_model.pth"
 CLASS_NAMES = ['Mild Demented', 'Moderate Demented', 'Non Demented', 'Very Mild Demented']
 # --- [END UPDATED] ---
 
+LOCAL_PRECAUTIONS = {
+    "Mild Demented": [
+        "Keep a simple daily routine with clear reminders for meals, medicines, and rest.",
+        "Use written notes, phone alarms, or labeled spaces to reduce memory strain.",
+        "Stay active with light walks, stretching, or another gentle movement most days.",
+        "Keep regular follow-up with a qualified doctor and share any changes in behavior or memory."
+    ],
+    "Moderate Demented": [
+        "Create a calm home setup with fewer distractions and easy-to-follow daily steps.",
+        "Ask a trusted family member or caregiver to help with schedules, appointments, and safety checks.",
+        "Encourage short, familiar activities such as music, conversation, or simple puzzles.",
+        "Watch for changes in sleep, eating, or confusion and discuss them with a clinician."
+    ],
+    "Very Mild Demented": [
+        "Build strong habits around sleep, hydration, movement, and regular mental activity.",
+        "Use calendars, checklists, and reminders early so daily tasks stay manageable.",
+        "Reduce stress with breaks, breathing exercises, and steady social connection.",
+        "Plan a medical follow-up if memory concerns continue or become more frequent."
+    ],
+    "Non Demented": [
+        "Keep supporting brain health with regular exercise, good sleep, and balanced meals.",
+        "Stay mentally active through reading, conversation, or memory games.",
+        "Maintain routine health checkups if any symptoms still concern you.",
+        "Seek clinical advice if memory issues continue even when the scan result looks reassuring."
+    ],
+}
+
 # --- Define the TunedCNN Architecture (Copied from new notebook) ---
 class TunedCNN(nn.Module):
     def __init__(self, num_classes=4):
@@ -137,6 +164,77 @@ def process_image_pytorch(image_bytes):
     
     return image_tensor
 
+
+def build_precautions_text(diagnosis):
+    tips = LOCAL_PRECAUTIONS.get(
+        diagnosis,
+        [
+            "Keep a consistent daily routine with enough sleep, hydration, and light exercise.",
+            "Use simple reminders, notes, or alarms to make day-to-day tasks easier.",
+            "Stay socially and mentally active with calm, familiar activities.",
+            "Discuss ongoing symptoms or concerns with a qualified clinician."
+        ],
+    )
+
+    formatted_tips = "\n".join([f"{index}. {tip}" for index, tip in enumerate(tips, start=1)])
+    return (
+        "Based on the model's result, here are some general lifestyle tips that may be helpful:\n"
+        f"{formatted_tips}"
+    )
+
+
+def build_local_chat_response(message, diagnosis=None):
+    message_text = (message or "").strip().lower()
+
+    if "precaution" in message_text or "tip" in message_text or "care" in message_text:
+        return build_precautions_text(diagnosis or "general")
+
+    if "diagnosis" in message_text or "result" in message_text or "meaning" in message_text:
+        if diagnosis:
+            return (
+                f"The model result shown is '{diagnosis}'. This is only a screening-style AI result, "
+                "so it should be reviewed with a qualified clinician before making medical decisions."
+            )
+        return (
+            "I can help explain the result once an MRI analysis is available. "
+            "Please run the scan first, then ask about the diagnosis."
+        )
+
+    if "doctor" in message_text or "hospital" in message_text or "emergency" in message_text:
+        return (
+            "If symptoms are getting worse, daily life is becoming harder, or there are sudden changes "
+            "in memory, behavior, balance, or speech, please contact a qualified doctor promptly."
+        )
+
+    if "food" in message_text or "diet" in message_text or "eat" in message_text:
+        return (
+            "Simple helpful habits include regular meals, enough water, fruits and vegetables, "
+            "and avoiding long gaps without eating. A clinician or dietitian can give more personal advice."
+        )
+
+    if "exercise" in message_text or "walk" in message_text or "activity" in message_text:
+        return (
+            "Gentle daily movement like walking, stretching, or light guided exercise can be helpful "
+            "for general wellbeing, as long as it is comfortable and safe."
+        )
+
+    if "memory" in message_text or "sleep" in message_text or "stress" in message_text:
+        return (
+            "Supportive habits often include regular sleep, lower stress, daily structure, reminders, "
+            "light physical activity, and staying socially engaged."
+        )
+
+    if diagnosis:
+        return (
+            f"I could not reach Gemini just now, but I can still help with general guidance around "
+            f"the result '{diagnosis}'. Ask about lifestyle tips, what the result means, or when to seek care."
+        )
+
+    return (
+        "I could not reach Gemini just now, but I can still help with general non-diagnostic guidance. "
+        "Ask about healthy routines, memory-support habits, or when to speak with a clinician."
+    )
+
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the Alzheimer's Detection API (Tuned PyTorch)"}
@@ -171,33 +269,18 @@ async def predict(file: UploadFile = File(...)):
 
 @app.post("/get_precautions")
 async def get_precautions(data: dict):
-    # This endpoint is unchanged
     diagnosis = data.get("diagnosis")
     if not diagnosis: return {"error": "No diagnosis provided"}
-    if not gemini_model: return {"error": "Chatbot model not configured"}
-    try:
-        prompt = f"""
-        You are a helpful and empathetic health assistant.
-        A user's machine learning model has returned a potential diagnosis of: "{diagnosis}".
-        Please provide 3-5 general, non-prescription precautions and lifestyle tips for this condition.
-        IMPORTANT:
-        1.  DO NOT use any medical jargon.
-        2.  DO NOT suggest any specific medications or drugs.
-        3.  DO NOT give direct medical advice.
-        4.  Start your response with: "Based on the model's result, here are some general lifestyle tips that may be helpful:"
-        5.  Keep the response concise and easy to understand.
-        """
-        response = gemini_model.generate_content(prompt)
-        return {"response_text": response.text}
-    except Exception as e:
-        print(f"Chatbot Exception: {e}")
-        return {"error": f"Chatbot failed: {e}"}
+    return {"response_text": build_precautions_text(diagnosis)}
 
 # --- UPDATED CHATBOT ENDPOINT ---
 @app.post("/chat")
 async def chat(data: ChatPayload): # Now uses the Pydantic model
     if not gemini_model:
-        return {"error": "Chatbot model not configured"}
+        return {
+            "response_text": build_local_chat_response(data.message, data.diagnosis),
+            "fallback": True,
+        }
 
     try:
         # 1. Define the System Prompt & Safety Rules
@@ -239,6 +322,13 @@ async def chat(data: ChatPayload): # Now uses the Pydantic model
         
     except Exception as e:
         print(f"Chatbot Exception: {e}")
+        error_text = str(e)
+        if "429" in error_text or "quota" in error_text.lower():
+            return {
+                "response_text": build_local_chat_response(data.message, data.diagnosis),
+                "fallback": True,
+                "warning": "Gemini free-tier rate limit reached. Showing local fallback guidance for now.",
+            }
         return {"error": f"Chatbot failed: {e}"}
 # --- END UPDATED ENDPOINT ---
 

@@ -5,7 +5,7 @@ import { Link } from "react-router-dom";
 export default function Footer() {
   return (
     <footer
-      className="w-full mt-16"
+      className="w-full"
       style={{
         backgroundColor: "#DDD0C8",
         borderTop: "1px solid rgba(50,50,50,0.15)",
