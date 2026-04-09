@@ -254,6 +254,19 @@ export default function MemoryGamePage() {
                   >
                     <Link to="/">Back to Home</Link>
                   </Button>
+
+                  <Button
+                    asChild
+                    size="lg"
+                    variant="outline"
+                    style={{
+                      borderColor: DARK,
+                      color: DARK,
+                      backgroundColor: "rgba(255,255,255,0.52)",
+                    }}
+                  >
+                    <Link to="/sequence-recall">Try Sequence Recall</Link>
+                  </Button>
                 </div>
               </div>
 

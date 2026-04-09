@@ -10,6 +10,7 @@ const HowItWorks = lazy(() => import("./pages/HowItWorks"));
 const PrivacyPage = lazy(() => import("./pages/PrivacyPage"));
 const ContactPage = lazy(() => import("./pages/ContactPage"));
 const MemoryGamePage = lazy(() => import("./pages/MemoryGamePage"));
+const SequenceRecallPage = lazy(() => import("./pages/SequenceRecallPage"));
 
 function PageFallback() {
   return (
@@ -42,6 +43,7 @@ export default function App() {
               <Route path="/privacy" element={<PrivacyPage />} />
               <Route path="/contact" element={<ContactPage />} />
               <Route path="/memory-game" element={<MemoryGamePage />} />
+              <Route path="/sequence-recall" element={<SequenceRecallPage />} />
             </Routes>
           </Suspense>
         </main>
