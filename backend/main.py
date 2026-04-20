@@ -12,7 +12,10 @@ from PIL import Image
 # --- End PyTorch Imports ---
 import io
 import os
+import subprocess
+import tempfile
 from dotenv import load_dotenv
+from fastapi.responses import Response
 
 # --- NEW Pydantic Imports ---
 from pydantic import BaseModel
@@ -96,6 +99,10 @@ class ChatPayload(BaseModel):
     history: List[HistoryItem]
     diagnosis: Optional[str] = None # The diagnosis is optional
 # --- END NEW Pydantic Models ---
+
+
+class SpeechPayload(BaseModel):
+    text: str
 
 
 # Initialize FastAPI app
@@ -235,6 +242,45 @@ def build_local_chat_response(message, diagnosis=None):
         "Ask about healthy routines, memory-support habits, or when to speak with a clinician."
     )
 
+
+def synthesize_speech_wav(text):
+    normalized_text = " ".join((text or "").split()).strip()
+    if not normalized_text:
+        raise ValueError("No text provided for speech synthesis.")
+
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".txt", delete=False, encoding="utf-8") as text_file:
+        text_file.write(normalized_text)
+        text_path = text_file.name
+
+    aiff_path = f"{text_path}.aiff"
+    wav_path = f"{text_path}.wav"
+
+    try:
+        say_result = subprocess.run(
+            ["say", "-v", "Samantha", "-f", text_path, "-o", aiff_path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if say_result.returncode != 0:
+            raise RuntimeError((say_result.stderr or say_result.stdout or "say failed").strip())
+
+        convert_result = subprocess.run(
+            ["afconvert", "-f", "WAVE", "-d", "LEI16", aiff_path, wav_path],
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if convert_result.returncode != 0:
+            raise RuntimeError((convert_result.stderr or convert_result.stdout or "afconvert failed").strip())
+
+        with open(wav_path, "rb") as audio_file:
+            return audio_file.read()
+    finally:
+        for path in (text_path, aiff_path, wav_path):
+            if os.path.exists(path):
+                os.remove(path)
+
 @app.get("/")
 def read_root():
     return {"message": "Welcome to the Alzheimer's Detection API (Tuned PyTorch)"}
@@ -331,6 +377,16 @@ async def chat(data: ChatPayload): # Now uses the Pydantic model
             }
         return {"error": f"Chatbot failed: {e}"}
 # --- END UPDATED ENDPOINT ---
+
+
+@app.post("/speak")
+async def speak(payload: SpeechPayload):
+    try:
+        audio_bytes = synthesize_speech_wav(payload.text)
+        return Response(content=audio_bytes, media_type="audio/wav")
+    except Exception as e:
+        print(f"Speech synthesis Exception: {e}")
+        return {"error": f"Speech synthesis failed: {e}"}
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

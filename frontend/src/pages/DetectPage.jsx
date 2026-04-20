@@ -32,6 +32,12 @@ export default function DetectPage() {
   const precautionsCacheRef = useRef({});
   const recognitionRef = useRef(null);
   const lastSpokenTextRef = useRef("");
+  const activeUtteranceRef = useRef(null);
+  const activeAudioSourceRef = useRef(null);
+  const audioContextRef = useRef(null);
+  const availableVoicesRef = useRef([]);
+  const audioUnlockedRef = useRef(false);
+  const speechUnlockedRef = useRef(false);
   const [file, setFile] = useState(null);
   const [preview, setPreview] = useState(null);
   const [diagnosis, setDiagnosis] = useState(null);
@@ -49,6 +55,7 @@ export default function DetectPage() {
   const [voiceError, setVoiceError] = useState(null);
   const [pendingVoiceMessage, setPendingVoiceMessage] = useState(null);
   const [voiceCapabilities, setVoiceCapabilities] = useState({
+    audio: false,
     synthesis: false,
     recognition: false,
   });
@@ -63,6 +70,161 @@ export default function DetectPage() {
     }
   }, [chatHistory]);
 
+  const loadAvailableVoices = () => {
+    if (
+      typeof window === "undefined" ||
+      !("speechSynthesis" in window)
+    ) {
+      return [];
+    }
+
+    const voices = window.speechSynthesis.getVoices();
+    availableVoicesRef.current = Array.isArray(voices) ? voices : [];
+    return availableVoicesRef.current;
+  };
+
+  const getPreferredVoice = () => {
+    const voices =
+      availableVoicesRef.current.length > 0
+        ? availableVoicesRef.current
+        : loadAvailableVoices();
+
+    if (voices.length === 0) return null;
+
+    return (
+      voices.find((voice) =>
+        ["en-IN", "en-US", "en-GB"].includes(voice.lang)
+      ) ||
+      voices.find((voice) => voice.lang?.startsWith("en")) ||
+      voices[0]
+    );
+  };
+
+  const unlockSpeechPlayback = () => {
+    if (
+      typeof window === "undefined" ||
+      !("speechSynthesis" in window)
+    ) {
+      return false;
+    }
+
+    try {
+      window.speechSynthesis.resume();
+      loadAvailableVoices();
+      speechUnlockedRef.current = true;
+      return true;
+    } catch {
+      speechUnlockedRef.current = false;
+      return false;
+    }
+  };
+
+  const stopAudioPlayback = () => {
+    if (activeAudioSourceRef.current) {
+      activeAudioSourceRef.current.onended = null;
+      try {
+        activeAudioSourceRef.current.stop();
+      } catch {
+        // Ignore double-stop errors from already-finished sources.
+      }
+      activeAudioSourceRef.current.disconnect();
+      activeAudioSourceRef.current = null;
+    }
+  };
+
+  const unlockAudioPlayback = async () => {
+    if (typeof window === "undefined") return false;
+
+    const AudioContextCtor =
+      window.AudioContext || window.webkitAudioContext;
+
+    if (!AudioContextCtor) return false;
+
+    try {
+      if (!audioContextRef.current) {
+        audioContextRef.current = new AudioContextCtor();
+      }
+
+      if (audioContextRef.current.state === "suspended") {
+        await audioContextRef.current.resume();
+      }
+
+      audioUnlockedRef.current =
+        audioContextRef.current.state === "running";
+      return audioUnlockedRef.current;
+    } catch {
+      audioUnlockedRef.current = false;
+      return false;
+    }
+  };
+
+  const playBackendSpeech = async (text, { userInitiated = false } = {}) => {
+    if (typeof window === "undefined") return false;
+
+    if (userInitiated) {
+      await unlockAudioPlayback();
+    }
+
+    if (!audioUnlockedRef.current) {
+      return false;
+    }
+
+    const response = await fetch("http://localhost:8000/speak", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Audio service is not responding.");
+    }
+
+    const contentType = response.headers.get("content-type") || "";
+    if (!contentType.includes("audio/")) {
+      const data = await response.json().catch(() => null);
+      throw new Error(
+        data?.error || "Audio playback could not be prepared."
+      );
+    }
+
+    if (!audioContextRef.current) {
+      const AudioContextCtor =
+        window.AudioContext || window.webkitAudioContext;
+      if (!AudioContextCtor) {
+        return false;
+      }
+      audioContextRef.current = new AudioContextCtor();
+    }
+
+    if (audioContextRef.current.state === "suspended") {
+      await audioContextRef.current.resume();
+    }
+
+    const audioBufferData = await response.arrayBuffer();
+    const audioBuffer = await audioContextRef.current.decodeAudioData(
+      audioBufferData.slice(0)
+    );
+
+    stopAudioPlayback();
+    window.speechSynthesis?.cancel();
+
+    const source = audioContextRef.current.createBufferSource();
+    source.buffer = audioBuffer;
+    source.connect(audioContextRef.current.destination);
+    source.onended = () => {
+      if (activeAudioSourceRef.current === source) {
+        activeAudioSourceRef.current = null;
+      }
+      setIsSpeaking(false);
+    };
+
+    activeAudioSourceRef.current = source;
+    setVoiceError(null);
+    setIsSpeaking(true);
+    source.start(0);
+    return true;
+  };
+
   useEffect(() => {
     if (typeof window === "undefined") return undefined;
 
@@ -71,90 +233,169 @@ export default function DetectPage() {
       window.SpeechRecognition || window.webkitSpeechRecognition;
 
     setVoiceCapabilities({
+      audio: Boolean(window.AudioContext || window.webkitAudioContext),
       synthesis: supportsSynthesis,
       recognition: Boolean(SpeechRecognitionCtor),
     });
 
-    if (!SpeechRecognitionCtor) return undefined;
-
-    const recognition = new SpeechRecognitionCtor();
-    recognition.continuous = false;
-    recognition.interimResults = true;
-    recognition.lang = "en-US";
-
-    recognition.onstart = () => {
-      setIsListening(true);
-      setVoiceError(null);
-    };
-
-    recognition.onresult = (event) => {
-      let transcript = "";
-      let finalTranscript = "";
-
-      for (let index = 0; index < event.results.length; index += 1) {
-        const phrase = event.results[index][0]?.transcript ?? "";
-        transcript += phrase;
-        if (event.results[index].isFinal) {
-          finalTranscript += phrase;
-        }
-      }
-
-      if (transcript.trim()) {
-        setUserMessage(transcript.trim());
-      }
-
-      if (finalTranscript.trim()) {
-        setPendingVoiceMessage(finalTranscript.trim());
-      }
-    };
-
-    recognition.onerror = (event) => {
-      const errorMap = {
-        "not-allowed": "Microphone access was denied.",
-        "service-not-allowed": "Speech recognition is not allowed in this browser.",
-        "no-speech": "No speech was detected. Please try again.",
-        "audio-capture": "No microphone was detected.",
+    if (supportsSynthesis) {
+      loadAvailableVoices();
+      window.speechSynthesis.onvoiceschanged = () => {
+        loadAvailableVoices();
       };
-      setVoiceError(errorMap[event.error] || "Voice input could not be completed.");
-      setIsListening(false);
-    };
+    }
 
-    recognition.onend = () => {
-      setIsListening(false);
-    };
+    let recognition = null;
 
-    recognitionRef.current = recognition;
+    if (SpeechRecognitionCtor) {
+      recognition = new SpeechRecognitionCtor();
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.lang = "en-US";
+
+      recognition.onstart = () => {
+        setIsListening(true);
+        setVoiceError(null);
+      };
+
+      recognition.onresult = (event) => {
+        let transcript = "";
+        let finalTranscript = "";
+
+        for (let index = 0; index < event.results.length; index += 1) {
+          const phrase = event.results[index][0]?.transcript ?? "";
+          transcript += phrase;
+          if (event.results[index].isFinal) {
+            finalTranscript += phrase;
+          }
+        }
+
+        if (transcript.trim()) {
+          setUserMessage(transcript.trim());
+        }
+
+        if (finalTranscript.trim()) {
+          setPendingVoiceMessage(finalTranscript.trim());
+        }
+      };
+
+      recognition.onerror = (event) => {
+        const errorMap = {
+          "not-allowed": "Microphone access was denied.",
+          "service-not-allowed": "Speech recognition is not allowed in this browser.",
+          "no-speech": "No speech was detected. Please try again.",
+          "audio-capture": "No microphone was detected.",
+        };
+        setVoiceError(errorMap[event.error] || "Voice input could not be completed.");
+        setIsListening(false);
+      };
+
+      recognition.onend = () => {
+        setIsListening(false);
+      };
+
+      recognitionRef.current = recognition;
+    }
 
     return () => {
-      recognition.stop();
+      recognition?.stop();
+      recognitionRef.current = null;
+      stopAudioPlayback();
+      audioContextRef.current?.close?.();
+      audioContextRef.current = null;
       if (supportsSynthesis) {
+        activeUtteranceRef.current = null;
         window.speechSynthesis.cancel();
+        window.speechSynthesis.onvoiceschanged = null;
       }
     };
   }, []);
 
-  const speakText = (text) => {
-    if (!voiceCapabilities.synthesis || typeof window === "undefined") return;
+  const speakText = async (text, { userInitiated = false } = {}) => {
+    if (typeof window === "undefined") return;
 
     const normalizedText = text?.replace(/\s+/g, " ").trim();
     if (!normalizedText) return;
 
-    window.speechSynthesis.cancel();
+    try {
+      const playedByBackend = await playBackendSpeech(normalizedText, {
+        userInitiated,
+      });
+      if (playedByBackend) {
+        return;
+      }
+    } catch (error) {
+      setVoiceError(error.message || "Audio playback could not be started.");
+    }
+
+    if (userInitiated) {
+      unlockSpeechPlayback();
+    }
+
+    if (!speechUnlockedRef.current) {
+      setVoiceError(
+        "Click Enable Voice Mode once to allow speech playback in this browser."
+      );
+      return;
+    }
+
+    const synthesis = window.speechSynthesis;
+    synthesis.cancel();
+    synthesis.resume();
     const utterance = new SpeechSynthesisUtterance(normalizedText);
+    const preferredVoice = getPreferredVoice();
+
     utterance.rate = 1;
     utterance.pitch = 1;
-    utterance.onstart = () => setIsSpeaking(true);
-    utterance.onend = () => setIsSpeaking(false);
-    utterance.onerror = () => {
+    utterance.lang = preferredVoice?.lang || "en-US";
+    if (preferredVoice) {
+      utterance.voice = preferredVoice;
+    }
+
+    utterance.onstart = () => {
+      speechUnlockedRef.current = true;
+      setVoiceError(null);
+      setIsSpeaking(true);
+    };
+    utterance.onend = () => {
+      if (activeUtteranceRef.current === utterance) {
+        activeUtteranceRef.current = null;
+      }
       setIsSpeaking(false);
+    };
+    utterance.onerror = (event) => {
+      if (activeUtteranceRef.current === utterance) {
+        activeUtteranceRef.current = null;
+      }
+      setIsSpeaking(false);
+      if (event.error === "interrupted" || event.error === "canceled") {
+        return;
+      }
+      if (event.error === "not-allowed") {
+        setVoiceError(
+          "Browser blocked speech playback. Click Read Result Aloud to try again."
+        );
+        return;
+      }
       setVoiceError("Speech playback could not be started.");
     };
-    window.speechSynthesis.speak(utterance);
+
+    activeUtteranceRef.current = utterance;
+
+    try {
+      synthesis.speak(utterance);
+    } catch {
+      activeUtteranceRef.current = null;
+      setIsSpeaking(false);
+      setVoiceError("Speech playback could not be started.");
+    }
   };
 
   const stopVoiceExperience = () => {
     recognitionRef.current?.stop();
+    stopAudioPlayback();
     if (typeof window !== "undefined" && voiceCapabilities.synthesis) {
+      activeUtteranceRef.current = null;
       window.speechSynthesis.cancel();
     }
     setIsListening(false);
@@ -354,9 +595,9 @@ export default function DetectPage() {
     const summary = `Analysis complete. The result is ${diagnosis} with ${confidence} percent confidence.`;
     if (lastSpokenTextRef.current === summary) return;
 
-    speakText(summary);
+    void speakText(summary);
     lastSpokenTextRef.current = summary;
-  }, [voiceEnabled, diagnosis, confidence, voiceCapabilities.synthesis]);
+  }, [voiceEnabled, diagnosis, confidence, voiceCapabilities.audio, voiceCapabilities.synthesis]);
 
   useEffect(() => {
     if (!voiceEnabled || chatHistory.length === 0) return;
@@ -367,9 +608,9 @@ export default function DetectPage() {
     const spokenText = latestMessage.parts.join(" ").trim();
     if (!spokenText || lastSpokenTextRef.current === spokenText) return;
 
-    speakText(spokenText);
+    void speakText(spokenText);
     lastSpokenTextRef.current = spokenText;
-  }, [chatHistory, voiceEnabled, voiceCapabilities.synthesis]);
+  }, [chatHistory, voiceEnabled, voiceCapabilities.audio, voiceCapabilities.synthesis]);
 
   return (
     <div className="min-h-screen bg-[#F5F7F6] text-[#2E3A3A]">
@@ -387,8 +628,14 @@ export default function DetectPage() {
             <Button
               type="button"
               variant={voiceEnabled ? "default" : "outline"}
-              onClick={() => {
+              onClick={async () => {
                 const nextValue = !voiceEnabled;
+                if (nextValue) {
+                  await unlockAudioPlayback();
+                }
+                if (nextValue && voiceCapabilities.synthesis) {
+                  unlockSpeechPlayback();
+                }
                 setVoiceEnabled(nextValue);
                 setVoiceError(null);
                 if (!nextValue) {
@@ -426,9 +673,9 @@ export default function DetectPage() {
           {voiceError ? (
             <p className="mt-3 text-sm text-[#B45309]">{voiceError}</p>
           ) : null}
-          {!voiceCapabilities.synthesis && !voiceCapabilities.recognition ? (
+          {!voiceCapabilities.audio && !voiceCapabilities.synthesis && !voiceCapabilities.recognition ? (
             <p className="mt-3 text-sm text-[#7A8E8C]">
-              Voice mode depends on browser speech APIs and may work best in Chrome or Edge.
+              Voice mode depends on browser audio or speech APIs and may work best in Chrome or Edge.
             </p>
           ) : null}
         </header>
@@ -523,12 +770,13 @@ export default function DetectPage() {
                       <Button
                         type="button"
                         variant="outline"
-                        onClick={() =>
-                          speakText(
-                            `Analysis complete. The result is ${diagnosis} with ${confidence} percent confidence.`
-                          )
-                        }
-                        disabled={!voiceCapabilities.synthesis}
+                        onClick={() => {
+                          void speakText(
+                            `Analysis complete. The result is ${diagnosis} with ${confidence} percent confidence.`,
+                            { userInitiated: true }
+                          );
+                        }}
+                        disabled={!voiceCapabilities.audio && !voiceCapabilities.synthesis}
                         className="border-[#C8D6D0] bg-white text-[#2E3A3A] hover:bg-[#F9FBFA]"
                       >
                         <Volume2 className="h-4 w-4" />
